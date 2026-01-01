@@ -40,4 +40,4 @@
 MIT License - 商用・個人利用を問わず、自由にご利用いただけます。
 
 ---
-Developed by [] - Sky Note Project
+Developed by [Shota.S] - Sky Note Project
