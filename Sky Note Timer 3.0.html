@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sky Note Timer 3.0</title>
+    <style>
+        :root {
+            --bg: #000000; --grid: rgba(255,255,255,0.05); --panel: #111112;
+            --text: #ffffff; --text-m: rgba(255,255,255,0.4); --border: rgba(255,255,255,0.15);
+            --accent: #0a84ff; --card: #1c1c1e; --input-bg: #2c2c2e;
+        }
+        [data-theme="light"] {
+            --bg: #f2f2f7; --grid: rgba(0,0,0,0.05); --panel: #ffffff;
+            --text: #000000; --text-m: rgba(0,0,0,0.5); --border: rgba(0,0,0,0.1);
+            --accent: #007aff; --card: #e5e5ea; --input-bg: #ffffff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, sans-serif; }
+        body, .panel, .setting-row, .key, .input-text, .select-custom, .btn-toggle {
+            transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+
+        body { background-color: var(--bg); background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 40px 40px; color: var(--text); height: 100vh; overflow: hidden; display: flex; }
+        .container { flex: 1; display: flex; width: 100%; height: 100%; }
+        
+        /* 視聴エリア */
+        .viewer { flex: 1.3; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; position: relative; }
+        .timer-unit { position: relative; width: min(65vw, 65vh); height: min(65vw, 65vh); display: flex; justify-content: center; align-items: center; }
+        .ring-svg { position: absolute; width: 100%; height: 100%; transform: rotate(-90deg); }
+        .track { fill: none; stroke: var(--border); stroke-width: 1.5; }
+        .progress { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; transition: stroke-dashoffset 0.1s linear; }
+        
+        #timeDisplay { font-weight: 200; font-variant-numeric: tabular-nums; line-height: 1; font-size: min(10vw, 10vh); letter-spacing: -2px; z-index: 10; }
+        .status-label { margin-top: 15px; font-size: 1.2rem; color: var(--accent); font-weight: 600; letter-spacing: 4px; height: 1.5em; text-align: center; }
+
+        /* 設定パネル */
+        .panel { flex: 0.7; max-width: 440px; background: var(--panel); border-left: 1px solid var(--border); padding: 35px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; z-index: 20; }
+        .main-title { font-size: 1.5rem; font-weight: 900; color: var(--accent); letter-spacing: -0.5px; margin-bottom: 5px; }
+
+        .section { display: flex; flex-direction: column; gap: 10px; }
+        .section-header { font-size: 0.75rem; font-weight: 800; color: var(--text-m); letter-spacing: 1.5px; border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+
+        .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .key { background: var(--card); border: none; color: var(--text); padding: 18px; border-radius: 12px; font-size: 1.3rem; cursor: pointer; }
+        .key:active { transform: scale(0.92); background: var(--accent); color: white; }
+
+        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .setting-label { font-size: 0.9rem; font-weight: 600; }
+        .input-text { background: var(--input-bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 0.9rem; outline: none; width: 50%; text-align: right; }
+        .btn-toggle { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; min-width: 80px; text-align: center; }
+        .btn-toggle.active { border-color: var(--accent); color: var(--accent); background: rgba(10, 132, 255, 0.1); }
+        .select-custom { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 8px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; outline: none; }
+        
+        .vol-group { display: flex; align-items: center; gap: 10px; width: 60%; justify-content: flex-end; }
+        #volValue { font-size: 0.85rem; font-weight: bold; width: 40px; text-align: right; color: var(--accent); }
+        input[type="range"] { accent-color: var(--accent); cursor: pointer; width: 100px; }
+
+        .footer-btns { display: grid; grid-template-columns: 1fr 2fr; gap: 15px; margin-top: auto; padding-top: 20px; }
+        .action-btn { padding: 22px; border-radius: 16px; border: none; font-weight: 800; font-size: 1.1rem; cursor: pointer; transition: 0.1s; }
+        .action-btn:active { transform: scale(0.95); }
+        .reset-btn { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+        .start-btn { background: var(--accent); color: white; }
+
+        /* 全画面表示のアニメーションとレイアウト調整 */
+        body:fullscreen .panel { display: none; }
+        body:fullscreen .viewer { flex: 1; height: 100vh; background: black; }
+        body:fullscreen .timer-unit { width: 90vh; height: 90vh; }
+        body:fullscreen #timeDisplay { font-size: 18vh; }
+
+        .flash-anim { animation: alert-flash 0.5s infinite; }
+        @keyframes alert-flash { 50% { background-color: rgba(255, 69, 58, 0.3); } }
+
+        /* 操作方法モーダル */
+        #modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 100; padding: 20px; }
+        .modal-content { background: var(--panel); padding: 35px; border-radius: 20px; border: 1px solid var(--border); width: 100%; max-width: 400px; position: relative; }
+        .modal-title { font-size: 1.4rem; font-weight: 800; color: var(--accent); margin-bottom: 20px; text-align: center; }
+        .kb-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 0.95rem; }
+        .kb-key { background: var(--card); padding: 4px 10px; border-radius: 6px; font-weight: bold; border: 1px solid var(--border); font-size: 0.85rem; }
+        .close-btn { position: absolute; top: 15px; right: 15px; cursor: pointer; font-size: 1.5rem; color: var(--text-m); }
+
+        @media (max-width: 1000px) { body { flex-direction: column; } .panel { max-width: 100%; border-top: 1px solid var(--border); } .viewer { height: 40vh; } }
+    </style>
+</head>
+<body id="mainBody">
+
+<div id="modal" onclick="App.toggleModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="close-btn" onclick="App.toggleModal()">×</div>
+        <div class="modal-title" id="modal-title">操作方法 / Guide</div>
+        <div id="kb-guide-content">
+            <div class="kb-row"><span>Start / Stop</span> <span class="kb-key">Space</span></div>
+            <div class="kb-row"><span>Reset</span> <span class="kb-key">R</span></div>
+            <div class="kb-row"><span>Full Screen</span> <span class="kb-key">F</span></div>
+            <div class="kb-row"><span>Close Guide</span> <span class="kb-key">Esc</span></div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="viewer">
+        <div class="timer-unit">
+            <svg class="ring-svg" viewBox="0 0 100 100">
+                <circle class="track" cx="50" cy="50" r="47"></circle>
+                <circle class="progress" id="ring" cx="50" cy="50" r="47" stroke-dasharray="295.3" stroke-dashoffset="0"></circle>
+            </svg>
+            <div class="time-box">
+                <div id="timeDisplay">00:00:00</div>
+                <div class="status-label" id="status">STANDBY</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="main-title">Sky Note Timer 3.0</div>
+
+        <div class="section">
+            <div class="section-header" id="header-input">数値入力</div>
+            <div class="numpad">
+                <button class="key" onclick="App.add(1)">1</button><button class="key" onclick="App.add(2)">2</button><button class="key" onclick="App.add(3)">3</button>
+                <button class="key" onclick="App.add(4)">4</button><button class="key" onclick="App.add(5)">5</button><button class="key" onclick="App.add(6)">6</button>
+                <button class="key" onclick="App.add(7)">7</button><button class="key" onclick="App.add(8)">8</button><button class="key" onclick="App.add(9)">9</button>
+                <button class="key" style="color:var(--accent)" onclick="App.add('00')">00</button><button class="key" onclick="App.add(0)">0</button><button class="key" style="color:#ff453a" onclick="App.clear()">C</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header" id="header-setting">設定</div>
+            <div class="setting-row">
+                <span class="setting-label" id="label-name">タイマーの名称</span>
+                <input type="text" id="timerName" class="input-text" placeholder="..." oninput="App.updateLabels()">
+            </div>
+            <div class="setting-row">
+                <span class="setting-label" id="label-vol">ボリューム</span>
+                <div class="vol-group">
+                    <input type="range" id="volumeRange" min="0" max="100" step="1" value="80" oninput="App.updateVolDisp()">
+                    <span id="volValue">80%</span>
+                </div>
+            </div>
+            <div class="setting-row">
+                <span class="setting-label" id="label-sound">通知音</span>
+                <select id="soundType" class="select-custom">
+                    <option value="zen" id="opt-zen">禅 - Zen</option>
+                    <option value="crystal" id="opt-crystal">輝 - Crystal</option>
+                    <option value="soft" id="opt-soft">和 - Soft</option>
+                    <option value="mute" id="opt-mute">消音</option>
+                </select>
+            </div>
+            <div class="setting-row">
+                <span class="setting-label" id="label-flash">背景点滅</span>
+                <button id="flashBtn" class="btn-toggle" onclick="App.toggleFlash()">OFF</button>
+            </div>
+            <div class="setting-row">
+                <span class="setting-label" id="label-fs">全画面表示</span>
+                <button class="btn-toggle" onclick="App.toggleFS()" id="btn-fs">FULL SCREEN</button>
+            </div>
+            <div class="setting-row">
+                <span class="setting-label" id="label-kb">操作方法</span>
+                <button class="btn-toggle" onclick="App.toggleModal()" id="btn-guide">HELP</button>
+            </div>
+            <div class="setting-row">
+                <span class="setting-label" id="label-theme">テーマ</span>
+                <button id="themeBtn" class="btn-toggle" onclick="App.toggleTheme()">切り替え</button>
+            </div>
+            <div class="setting-row">
+                <span class="setting-label" id="label-lang">言語設定</span>
+                <button id="langBtn" class="btn-toggle" onclick="App.toggleLang()">日本語</button>
+            </div>
+        </div>
+
+        <div class="footer-btns">
+            <button class="action-btn reset-btn" onclick="App.reset()">RESET</button>
+            <button class="action-btn start-btn" id="startBtn" onclick="App.mainAction()">START</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const App = {
+    buf: "", remain: 0, total: 0, running: false, alerting: false, isFlash: false, lang: 'jp',
+    timer: null, audio: null, alertId: null, wakeLock: null,
+    i18n: {
+        jp: { h_in: "数値入力", h_set: "設定", l_name: "タイマーの名称", l_vol: "ボリューム", l_sound: "通知音", l_flash: "背景点滅", l_theme: "テーマ", l_lang: "言語設定", l_fs: "全画面表示", l_kb: "操作方法", b_theme: "切り替え", curr_lang: "日本語", s_zen: "禅 - Zen", s_cry: "輝 - Crystal", s_soft: "和 - Soft", s_mute: "消音", stop: "STOP", up: "TIME UP", m_title: "操作方法" },
+        en: { h_in: "INPUT", h_set: "SETTINGS", l_name: "TITLE", l_vol: "VOLUME", l_sound: "SOUND", l_flash: "FLASH", l_theme: "THEME", l_lang: "LANG", l_fs: "FULL SCREEN", l_kb: "GUIDE", b_theme: "CHANGE", curr_lang: "ENGLISH", s_zen: "Zen", s_cry: "Crystal", s_soft: "Soft", s_mute: "Mute", stop: "STOP", up: "TIME UP", m_title: "Guide" }
+    },
+    
+    add(v) { if(this.running || this.alerting || (this.buf + v).length > 6) return; this.buf += v; this.sync(); },
+    clear() { if(!this.running && !this.alerting) { this.buf = ""; this.sync(); } },
+    
+    sync() {
+        const s = this.buf.padStart(6, '0');
+        document.getElementById('timeDisplay').innerText = `${s.slice(0, 2)}:${s.slice(2, 4)}:${s.slice(4, 6)}`;
+        this.total = parseInt(s.slice(0, 2))*3600 + parseInt(s.slice(2, 4))*60 + parseInt(s.slice(4, 6));
+        this.remain = this.total; this.setRing(1); this.updateLabels();
+    },
+    
+    setRing(r) { document.getElementById('ring').style.strokeDashoffset = 295.3 - (r * 295.3); },
+    
+    mainAction() { if(this.alerting) return this.stopAlert(); if(this.running) this.pause(); else if(this.remain > 0) this.start(); },
+    
+    async start() {
+        if(!this.audio) this.audio = new (window.AudioContext || window.webkitAudioContext)();
+        this.running = true; const target = Date.now() + (this.remain * 1000);
+        
+        // スリープ防止
+        if ('wakeLock' in navigator) { try { this.wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {} }
+        
+        this.timer = setInterval(() => { 
+            this.remain = Math.ceil((target - Date.now()) / 1000); 
+            if(this.remain <= 0) { this.remain = 0; this.onFinish(); } 
+            this.render(); 
+        }, 100);
+        this.updateLabels();
+    },
+    
+    render() {
+        const h = Math.floor(this.remain / 3600), m = Math.floor((this.remain % 3600) / 60), s = this.remain % 60;
+        document.getElementById('timeDisplay').innerText = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        this.setRing(this.total > 0 ? this.remain / this.total : 0);
+    },
+    
+    pause() { 
+        this.running = false; clearInterval(this.timer); 
+        if (this.wakeLock) { this.wakeLock.release(); this.wakeLock = null; }
+        this.updateLabels(); 
+    },
+    
+    reset() { 
+        this.pause(); 
+        if(this.alerting) this.stopAlert();
+        this.buf = ""; 
+        document.getElementById('timerName').value = ""; 
+        document.getElementById('volumeRange').value = 80;
+        this.updateVolDisp();
+        document.getElementById('soundType').value = "zen";
+        this.isFlash = false;
+        document.getElementById('flashBtn').innerText = "OFF";
+        document.getElementById('flashBtn').classList.remove('active');
+        this.sync(); 
+    },
+
+    onFinish() { 
+        clearInterval(this.timer); this.running = false; this.alerting = true; 
+        this.playSnd(); this.alertId = setInterval(() => this.playSnd(), 3000); 
+        if(this.isFlash) document.getElementById('mainBody').classList.add('flash-anim'); 
+        this.updateLabels(); 
+    },
+
+    stopAlert() { 
+        this.alerting = false; clearInterval(this.alertId); 
+        document.getElementById('mainBody').classList.remove('flash-anim'); 
+        this.reset(); 
+    },
+
+    toggleFS() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+        } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+        }
+    },
+
+    toggleModal() { 
+        const m = document.getElementById('modal');
+        m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+    },
+
+    updateVolDisp() { document.getElementById('volValue').innerText = document.getElementById('volumeRange').value + "%"; },
+
+    updateLabels() {
+        const t = this.i18n[this.lang]; const name = document.getElementById('timerName').value.toUpperCase();
+        const ids = { 'header-input': t.h_in, 'header-setting': t.h_set, 'label-name': t.l_name, 'label-vol': t.l_vol, 'label-sound': t.l_sound, 'label-flash': t.l_flash, 'label-theme': t.l_theme, 'label-lang': t.l_lang, 'label-fs': t.l_fs, 'label-kb': t.l_kb, 'langBtn': t.curr_lang, 'themeBtn': t.b_theme, 'opt-zen': t.s_zen, 'opt-crystal': t.s_cry, 'opt-soft': t.s_soft, 'opt-mute': t.s_mute, 'modal-title': t.m_title };
+        for(let id in ids) { if(document.getElementById(id)) document.getElementById(id).innerText = ids[id]; }
+        let bText = "START"; if(this.alerting || this.running) bText = "STOP"; else if(this.remain < this.total && this.remain > 0) bText = "RESUME";
+        document.getElementById('startBtn').innerText = bText;
+        document.getElementById('status').innerText = this.alerting ? t.up : (this.running ? (name || "RUNNING") : "STANDBY");
+    },
+
+    toggleTheme() { document.body.setAttribute('data-theme', document.body.getAttribute('data-theme') === 'light' ? 'dark' : 'light'); },
+    toggleLang() { this.lang = this.lang === 'jp' ? 'en' : 'jp'; this.updateLabels(); },
+    toggleFlash() { this.isFlash = !this.isFlash; document.getElementById('flashBtn').innerText = this.isFlash ? "ON" : "OFF"; document.getElementById('flashBtn').classList.toggle('active', this.isFlash); },
+    
+    playSnd() {
+        const type = document.getElementById('soundType').value; if(type === 'mute' || !this.audio) return;
+        const ctx = this.audio; const now = ctx.currentTime; const vol = document.getElementById('volumeRange').value / 100;
+        const g = ctx.createGain(); g.gain.setValueAtTime(vol * 0.7, now); g.gain.exponentialRampToValueAtTime(0.0001, now + 2.5);
+        
+        const playOsc = (freq, delay, typeName = 'sine') => {
+            const o = ctx.createOscillator(); o.type = typeName; o.frequency.setValueAtTime(freq, now + delay);
+            o.connect(g); o.start(now + delay); o.stop(now + 2.5);
+        };
+
+        if(type === 'zen') { playOsc(440, 0); playOsc(554.37, 0.05); } 
+        else if(type === 'crystal') { playOsc(880, 0); playOsc(1046.50, 0.1); playOsc(1318.51, 0.2); }
+        else if(type === 'soft') { playOsc(329.63, 0); playOsc(392.00, 0.1); }
+        g.connect(ctx.destination);
+    }
+};
+
+// キーボード操作
+window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.code === 'Space') { e.preventDefault(); App.mainAction(); }
+    if (e.code === 'KeyR') { App.reset(); }
+    if (e.code === 'KeyF') { App.toggleFS(); }
+    if (e.code === 'Escape') { if(document.getElementById('modal').style.display === 'flex') App.toggleModal(); }
+    // 数字入力
+    if (e.key >= '0' && e.key <= '9') { App.add(e.key); }
+    if (e.key === 'Backspace' || e.key === 'c' || e.key === 'C') { App.clear(); }
+});
+
+window.onload = () => App.sync();
+</script>
+</body>
+</html>
